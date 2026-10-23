@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CorpDB Forensics // Operação Sombra</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-dark: #07090e;
+            --amber-glow: rgba(245, 158, 11, 0.35);
+            --cyan-glow: rgba(6, 182, 212, 0.35);
+            --crimson-glow: rgba(239, 68, 68, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.14), transparent 55%),
+                radial-gradient(circle at 85% 85%, rgba(245, 158, 11, 0.1), transparent 45%),
+                linear-gradient(to bottom, rgba(7, 9, 14, 0.88), rgba(7, 9, 14, 0.97)),
+                url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1920&q=80');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: #e2e8f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Grade Forense Sutil */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Glassmorphism Forense */
+        .glass-card {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.7);
+        }
+
+        .glass-dossier {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.85), rgba(15, 23, 42, 0.92));
+            border-left: 4px solid #f59e0b;
+            box-shadow: 0 10px 30px -5px rgba(245, 158, 11, 0.12);
+        }
+
+        /* Slots do Cofre Mestre */
+        .vault-slot {
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.8);
+        }
+
+        .vault-slot.unlocked {
+            border-color: #f59e0b;
+            color: #fbbf24;
+            box-shadow: 0 0 18px var(--amber-glow), inset 0 0 10px rgba(245, 158, 11, 0.2);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        /* Botões de Blocos SQL Mobile */
+        .sql-chip {
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .sql-chip:active {
+            transform: scale(0.92);
+        }
+
+        /* Animação de Alarme Hacker */
+        @keyframes siren {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+            50% { box-shadow: 0 0 50px 10px rgba(239, 68, 68, 0.6); }
+        }
+        .alarm-active {
+            animation: siren 0.6s ease-in-out 3;
+            border-color: #ef4444 !important;
+        }
+
+        /* Scrollbar customizada */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
+    </style>
+</head>
+<body class="relative z-10 pb-12">
+
+    <!-- NOTIFICAÇÃO FLUTUANTE (TOAST) -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full px-4 pointer-events-none"></div>
+
+<!-- Ícone Secreto do Professor (Canto inferior direito) -->
+    <div class="fixed bottom-4 right-4 z-50 p-3 rounded-full bg-slate-900/50 hover:bg-red-500/20 border border-slate-700/50 hover:border-red-500/50 text-slate-600 hover:text-red-400 cursor-pointer transition-all duration-300 shadow-lg backdrop-blur-sm" onclick="abrirModalAdmin()" title="Acesso da Diretoria">
+        <i data-lucide="lock" class="w-5 h-5"></i>
+    </div>
+
+    <!-- Modal de Login do Professor (Escondido por padrão) -->
+    <div id="modal-admin" class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-sm rounded-2xl p-6 border border-red-500/30 shadow-2xl shadow-red-500/10">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-red-400 flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-5 h-5"></i> Acesso da Diretoria
+                </h3>
+                <button onclick="fecharModalAdmin()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div id="area-login-admin">
+                <p class="text-xs text-slate-300 mb-4 font-mono-code">Insira a senha mestra para gerenciar o jogo.</p>
+                <input type="password" id="senha-admin" placeholder="Senha Mestra..." class="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 focus:border-red-400 focus:outline-none text-white font-mono-code text-sm mb-3">
+                <button onclick="fazerLoginAdmin()" class="w-full py-3 rounded-xl bg-red-600/20 hover:bg-red-600/40 border border-red-500/50 text-red-300 font-bold text-xs uppercase tracking-wider transition">Autenticar</button>
+            </div>
+
+            <div id="area-painel-admin" class="hidden space-y-3 max-h-80 overflow-y-auto pr-1">
+                <p class="text-xs text-emerald-400 font-mono-code mb-2 border-b border-slate-700 pb-2">Acesso Concedido. Selecione a equipe para excluir:</p>
+                <div id="lista-equipes-admin" class="space-y-2">
+                    <!-- Equipes aparecerão aqui -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CABEÇALHO SUPERIOR FORENSE -->
+    <header class="sticky top-0 z-40 glass-card border-b border-slate-800/80 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10">
+                    <i data-lucide="shield-alert" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-mono-code uppercase tracking-widest px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-semibold animate-pulse">CASO #08-DATE</span>
+                        <span class="text-xs text-slate-400 hidden sm:inline">UNIDADE DE CRIMES CIBERNÉTICOS</span>
+                    </div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">DETETIVE SQL <span class="text-amber-400 font-light">// CorpDB</span></h1>
+                </div>
+            </div>
+
+            <!-- Controles de Modo (Telão vs Agente) e Som -->
+            <div class="flex items-center gap-2">
+                <button onclick="alternarSom()" id="btn-som" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs flex items-center gap-1.5" title="Ativar/Desativar Efeitos Sonoros">
+                    <i data-lucide="volume-2" class="w-4 h-4 text-cyan-400" id="icone-som"></i>
+                </button>
+                <button onclick="alternarModoTelao()" id="btn-telao" class="px-3 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 transition">
+                    <i data-lucide="tv" class="w-4 h-4"></i>
+                    <span id="texto-btn-telao">Modo Telão (Ranking)</span>
+                </button>
+                <button id="btn-sair" onclick="sairDaEquipe()" class="hidden p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs" title="Trocar de Equipe">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-3 sm:px-6 pt-6">
+
+        <!-- ========================================== -->
+        <!-- TELA 1: CREDENCIAMENTO DE AGENTES (LOGIN)  -->
+        <!-- ========================================== -->
+        <section id="tela-login" class="max-w-xl mx-auto mt-6 sm:mt-12">
+            <div class="glass-card rounded-2xl p-6 sm:p-8 border border-amber-500/30 relative overflow-hidden">
+                <div class="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="px-2.5 py-1 rounded text-xs font-mono-code bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">ACESSO NÍVEL 5</span>
+                    <span class="text-xs text-slate-400 font-mono-code">03:00 AM // SERVIDOR CENTRAL</span>
+                </div>
+
+                <h2 class="text-2xl sm:text-3xl font-bold text-white mb-2">Sabotagem na CorpDB</h2>
+                <p class="text-slate-300 text-sm leading-relaxed mb-6">
+                    Às 03h00 da madrugada, tabelas críticas de produção foram destruídas. O culpado ainda está no prédio e trancou o servidor com um <strong class="text-amber-400">Cofre Mestre de 7 Dígitos</strong>. Use a lógica do Cálculo Relacional e SQL para rastrear as pistas, encontrar o cúmplice e emitir o mandado de prisão.
+                </p>
+
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 mb-6">
+                    <div class="flex items-start gap-3">
+                        <i data-lucide="fingerprint" class="w-8 h-8 text-cyan-400 shrink-0 mt-1"></i>
+                        <div class="text-xs text-slate-300 space-y-1">
+                            <p class="font-semibold text-white">Regras de Engajamento:</p>
+                            <p>• Cada Ato resolvido libera <strong>1 Letra do Cofre</strong> e soma <strong>+100 pts</strong>.</p>
+                            <p>• Chutar respostas erradas no cofre aciona a diretoria (<strong>-50 pts</strong>).</p>
+                            <p>• Comandos destrutivos (<code class="text-red-400">DROP, DELETE, UPDATE</code>) disparam o Firewall (<strong>-100 pts</strong>).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <form onsubmit="entrarNoJogo(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-mono-code uppercase text-slate-400 mb-1.5">Codinome da Dupla ou Equipe Investigativa</label>
+                        <div class="relative">
+                            <i data-lucide="users" class="w-5 h-5 text-slate-500 absolute left-3.5 top-3"></i>
+                            <input type="text" id="nome-equipe" required placeholder="Ex: Esquadrão Codd, Dupla Join..." 
+                                class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-medium text-sm">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-sm uppercase tracking-wider shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2">
+                        <i data-lucide="terminal" class="w-5 h-5"></i>
+                        Iniciar Investigação Forense
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TELA 2: TERMINAL DE INVESTIGAÇÃO (O JOGO)  -->
+        <!-- ========================================== -->
+        <section id="tela-jogo" class="hidden space-y-6">
+
+            <!-- BARRA DE STATUS E COFRE DE 7 DÍGITOS -->
+            <div class="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    
+                    <!-- Info da Equipe -->
+                    <div class="flex items-center justify-between sm:justify-start gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                                <i data-lucide="award" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400 font-mono-code">EQUIPE CREDENCIADA</div>
+                                <div id="display-equipe" class="text-lg font-bold text-white">---</div>
+                            </div>
+                        </div>
+
+                        <div class="h-8 w-px bg-slate-800 hidden sm:block"></div>
+
+                        <div class="bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-800 text-center">
+                            <div class="text-[10px] font-mono-code text-slate-400 uppercase">Pontuação</div>
+                            <div id="display-pontos" class="text-xl font-extrabold font-mono-code text-emerald-400">0</div>
+                        </div>
+
+                        <div class="bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-800 text-center">
+                            <div class="text-[10px] font-mono-code text-slate-400 uppercase">Ato Atual</div>
+                            <div id="display-fase-badge" class="text-xl font-extrabold font-mono-code text-amber-400">1/7</div>
+                        </div>
+                    </div>
+
+                    <!-- O COFRE MESTRE DE 7 DÍGITOS -->
+                    <div class="flex flex-col items-center lg:items-end">
+                        <div class="flex items-center gap-1.5 mb-1.5">
+                            <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>
+                            <span class="text-xs font-mono-code uppercase tracking-wider text-slate-300">Cofre Mestre (7 Dígitos)</span>
+                        </div>
+                        <div id="cofre-slots" class="grid grid-cols-7 gap-1.5 sm:gap-2 w-full sm:w-auto">
+                            <!-- Gerado dinamicamente via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trilha de Progresso dos 7 Atos -->
+                <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1 overflow-x-auto pb-1" id="stepper-atos">
+                    <!-- Gerado via JS -->
+                </div>
+            </div>
+
+            <!-- GRID PRINCIPAL: DOSSIÊ & ESQUEMA (ESQUERDA) + TERMINAL & COFRE (DIREITA) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- COLUNA ESQUERDA (5 cols): DOSSIÊ DO ATO, DICIONÁRIO DE DADOS E SUSPEITOS -->
+                <div class="lg:col-span-5 space-y-6">
+
+                    <!-- CARD DO DOSSIÊ ATUAL -->
+                    <div class="glass-card glass-dossier rounded-2xl p-5 relative overflow-hidden">
+                        <div class="flex items-center justify-between mb-3">
+                            <span id="ato-tag" class="px-2.5 py-0.5 rounded text-xs font-mono-code font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                ATO 1 // RESTRIÇÃO SIMPLES
+                            </span>
+                            <span class="text-xs font-mono-code text-slate-400">CAP. 8 C. J. DATE</span>
+                        </div>
+
+                        <h3 id="ato-titulo" class="text-xl font-bold text-white mb-2">O Rastro na Catraca</h3>
+                        <p id="ato-historia" class="text-sm text-slate-300 leading-relaxed mb-4"></p>
+
+                        <!-- Pergunta / Missão -->
+                        <div class="bg-slate-950/90 border border-amber-500/40 rounded-xl p-3.5 mb-3">
+                            <div class="text-[11px] font-mono-code uppercase text-amber-400 font-bold mb-1 flex items-center gap-1.5">
+                                <i data-lucide="crosshair" class="w-4 h-4"></i> Objetivo da Consulta:
+                            </div>
+                            <p id="pergunta-atual" class="text-sm font-semibold text-white"></p>
+                        </div>
+
+                        <!-- Dica Teórica do Cap 8 de Date -->
+                        <details class="group bg-slate-900/70 border border-slate-800 rounded-xl p-3 text-xs">
+                            <summary class="cursor-pointer font-mono-code text-cyan-400 font-semibold flex items-center justify-between">
+                                <span class="flex items-center gap-1.5"><i data-lucide="book-open" class="w-4 h-4"></i> Pista Teórica (C. J. Date)</span>
+                                <span class="text-slate-500 group-open:rotate-180 transition">▼</span>
+                            </summary>
+                            <p id="ato-dica" class="mt-2 text-slate-300 font-mono-code leading-relaxed border-t border-slate-800 pt-2"></p>
+                        </details>
+                    </div>
+
+                    <!-- ABAS INTERATIVAS: DICIONÁRIO DER vs SUSPEITOS -->
+                    <div class="glass-card rounded-2xl p-5 border border-slate-800">
+                        <div class="flex border-b border-slate-800 mb-4 gap-2">
+                            <button onclick="trocarAbaDossie('esquema')" id="tab-esquema" class="pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-cyan-400 text-cyan-400 flex items-center gap-1.5">
+                                <i data-lucide="database" class="w-4 h-4"></i> Dicionário de Dados (DER)
+                            </button>
+                            <button onclick="trocarAbaDossie('suspeitos')" id="tab-suspeitos" class="pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                                <i data-lucide="user-check" class="w-4 h-4"></i> Fichas de Suspeitos (5)
+                            </button>
+                        </div>
+
+                        <!-- Conteúdo Aba 1: Esquema do Banco (Clicável para Celular!) -->
+                        <div id="conteudo-esquema" class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                            <p class="text-xs text-slate-400 mb-2">Toque em qualquer tabela abaixo para inspecionar seus dados automaticamente no terminal:</p>
+                            
+                            <div onclick="inspecionarTabela('corpdb_logs_catraca')" class="p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 cursor-pointer transition group">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono-code text-xs font-bold text-cyan-300 group-hover:text-cyan-200">corpdb_logs_catraca</span>
+                                    <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">SELECT * ⚡</span>
+                                </div>
+                                <div class="text-[11px] font-mono-code text-slate-400 mt-1">
+                                    🔑 <span class="text-amber-300">id</span> (PK) | 🔗 <span class="text-purple-300">funcionario_id</span> (FK) | <span class="text-slate-200">hora_entrada</span> | <span class="text-slate-200">hora_saida</span>
+                                </div>
+                            </div>
+
+                            <div onclick="inspecionarTabela('corpdb_funcionarios')" class="p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 cursor-pointer transition group">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono-code text-xs font-bold text-cyan-300 group-hover:text-cyan-200">corpdb_funcionarios</span>
+                                    <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">SELECT * ⚡</span>
+                                </div>
+                                <div class="text-[11px] font-mono-code text-slate-400 mt-1">
+                                    🔑 <span class="text-amber-300">id</span> (PK) | <span class="text-slate-200">nome</span> | 🔗 <span class="text-purple-300">cargo_id</span> (FK) | <span class="text-slate-200">salario</span>
+                                </div>
+                            </div>
+
+                            <div onclick="inspecionarTabela('corpdb_cargos')" class="p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 cursor-pointer transition group">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono-code text-xs font-bold text-cyan-300 group-hover:text-cyan-200">corpdb_cargos</span>
+                                    <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">SELECT * ⚡</span>
+                                </div>
+                                <div class="text-[11px] font-mono-code text-slate-400 mt-1">
+                                    🔑 <span class="text-amber-300">id</span> (PK) | <span class="text-slate-200">nome_setor</span>
+                                </div>
+                            </div>
+
+                            <div onclick="inspecionarTabela('corpdb_autorizacoes')" class="p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 cursor-pointer transition group">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono-code text-xs font-bold text-cyan-300 group-hover:text-cyan-200">corpdb_autorizacoes</span>
+                                    <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">SELECT * ⚡</span>
+                                </div>
+                                <div class="text-[11px] font-mono-code text-slate-400 mt-1">
+                                    🔑 <span class="text-amber-300">id</span> (PK) | 🔗 <span class="text-purple-300">funcionario_id</span> (FK) | <span class="text-slate-200">data_liberacao</span>
+                                </div>
+                            </div>
+
+                            <div onclick="inspecionarTabela('corpdb_projetos')" class="p-3 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 cursor-pointer transition group">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono-code text-xs font-bold text-cyan-300 group-hover:text-cyan-200">corpdb_projetos</span>
+                                    <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400">SELECT * ⚡</span>
+                                </div>
+                                <div class="text-[11px] font-mono-code text-slate-400 mt-1">
+                                    🔑 <span class="text-amber-300">id</span> (PK) | <span class="text-slate-200">nome_projeto</span> | <span class="text-slate-200">exclusoes_tabelas</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Conteúdo Aba 2: Galeria de Suspeitos -->
+                        <div id="conteudo-suspeitos" class="hidden space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                <div class="w-10 h-10 rounded-lg bg-pink-500/20 border border-pink-500/40 flex items-center justify-center font-bold text-pink-300">ID 1</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">Alice Ramos</div>
+                                    <div class="text-xs text-slate-400">Recursos Humanos • Turno Diurno</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                <div class="w-10 h-10 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center font-bold text-cyan-300">ID 2</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">Roberto Hacker</div>
+                                    <div class="text-xs text-slate-400">Desenvolvimento Sênior • Acesso Nível Alto</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                <div class="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center font-bold text-amber-300">ID 3</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">Carlos Sombra</div>
+                                    <div class="text-xs text-slate-400">Desenvolvimento Pleno • Especialista em Logs</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                <div class="w-10 h-10 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center font-bold text-purple-300">ID 4</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">Diana Chefe</div>
+                                    <div class="text-xs text-slate-400">Diretoria Executiva • Credencial Mestre</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center font-bold text-emerald-300">ID 5</div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">Elias Zelador</div>
+                                    <div class="text-xs text-slate-400">Manutenção Predial • Ronda Noturna</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUNA DIREITA (7 cols): CONSTRUTOR DE BLOCOS + TERMINAL SQL + COFRE -->
+                <div class="lg:col-span-7 space-y-6">
+
+                    <!-- TERMINAL FORENSE SQL -->
+                    <div id="painel-terminal" class="glass-card rounded-2xl p-5 border border-slate-800">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                <span class="text-xs font-mono-code font-bold text-cyan-400 ml-1">POSTGRESQL // READ-ONLY SANDBOX</span>
+                            </div>
+                            <button onclick="limparSQL()" class="text-xs font-mono-code text-slate-400 hover:text-white flex items-center gap-1">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Limpar
+                            </button>
+                        </div>
+
+                        <!-- BARRA DE BLOCOS TÁTICOS PARA CELULAR -->
+                        <div class="mb-3">
+                            <div class="text-[10px] font-mono-code uppercase text-slate-400 mb-1.5">Construtor Rápido Mobile (Toque para inserir):</div>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button type="button" onclick="inserirBloco('SELECT * FROM ')" class="sql-chip px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-mono-code text-xs font-semibold">SELECT * FROM</button>
+                                <button type="button" onclick="inserirBloco('WHERE ')" class="sql-chip px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-mono-code text-xs font-semibold">WHERE</button>
+                                <button type="button" onclick="inserirBloco('JOIN ')" class="sql-chip px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-mono-code text-xs font-semibold">JOIN</button>
+                                <button type="button" onclick="inserirBloco('ON ')" class="sql-chip px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-mono-code text-xs font-semibold">ON</button>
+                                <button type="button" onclick="inserirBloco('IN (SELECT )')" class="sql-chip px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono-code text-xs font-semibold">IN (Subconsulta)</button>
+                                <button type="button" onclick="inserirBloco('EXISTS (SELECT 1 FROM )')" class="sql-chip px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono-code text-xs font-semibold">EXISTS</button>
+                                <button type="button" onclick="inserirBloco('IS NULL')" class="sql-chip px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-mono-code text-xs font-semibold">IS NULL</button>
+                                <button type="button" onclick="inserirBloco('GROUP BY ')" class="sql-chip px-2.5 py-1 rounded-lg bg-pink-500/15 hover:bg-pink-500/25 border border-pink-500/30 text-pink-300 font-mono-code text-xs font-semibold">GROUP BY</button>
+                                <button type="button" onclick="inserirBloco('HAVING COUNT(*) > 5')" class="sql-chip px-2.5 py-1 rounded-lg bg-pink-500/15 hover:bg-pink-500/25 border border-pink-500/30 text-pink-300 font-mono-code text-xs font-semibold">HAVING</button>
+                            </div>
+                        </div>
+
+                        <!-- Editor de Consulta SQL -->
+                        <div class="relative">
+                            <textarea id="sql-input" rows="4" spellcheck="false"
+                                placeholder="SELECT * FROM corpdb_logs_catraca;"
+                                class="w-full p-4 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-400 focus:outline-none text-cyan-300 font-mono-code text-sm leading-relaxed shadow-inner"></textarea>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-3 mt-3">
+                            <span id="contador-linhas" class="text-xs font-mono-code text-slate-400">Pronto para execução.</span>
+                            <button onclick="executarSQL()" class="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs font-mono-code uppercase tracking-wider shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2">
+                                <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                                Executar Consulta SQL
+                            </button>
+                        </div>
+
+                        <!-- Tabela de Resultados do Banco -->
+                        <div id="resultado-sql" class="mt-4 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/80 max-h-72">
+                            <div class="p-6 text-center text-xs font-mono-code text-slate-500">
+                                O resultado da sua consulta PostgreSQL aparecerá aqui.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PAINEL ESPECIAL QBE (EXIBIDO NO ATO 7) -->
+                    <div id="painel-qbe" class="hidden glass-card rounded-2xl p-5 border-2 border-amber-500/60 bg-amber-950/10">
+                        <div class="flex items-center gap-2 text-amber-400 font-mono-code text-xs font-bold uppercase mb-2">
+                            <i data-lucide="grid" class="w-4 h-4"></i> Matriz Visual Query-By-Example (Seção 8.8 C. J. Date)
+                        </div>
+                        <p class="text-xs text-slate-300 mb-3">
+                            No QBE, formulamos a consulta preenchendo exemplos visuais nas colunas da tabela. Confira o resumo das 6 evidências coletadas nos atos anteriores para destravar o Mandado de Prisão:
+                        </p>
+                        <div class="overflow-x-auto mb-3">
+                            <table class="w-full text-xs font-mono-code border border-amber-500/30 rounded-lg overflow-hidden">
+                                <thead class="bg-amber-500/20 text-amber-300">
+                                    <tr>
+                                        <th class="p-2 text-left">RelVar (Tabela)</th>
+                                        <th class="p-2 text-left">Condição QBE</th>
+                                        <th class="p-2 text-left">Evidência</th>
+                                        <th class="p-2 text-left">Letra</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800 bg-slate-950/90 text-slate-300">
+                                    <tr><td class="p-2">corpdb_logs_catraca</td><td class="p-2 text-cyan-400">P.3 (02:15h)</td><td class="p-2">Carlos Sombra</td><td class="p-2 font-bold text-amber-400">A</td></tr>
+                                    <tr><td class="p-2">corpdb_cargos</td><td class="p-2 text-cyan-400">IN (Setor ID 2)</td><td class="p-2">Desenvolvimento</td><td class="p-2 font-bold text-amber-400">L</td></tr>
+                                    <tr><td class="p-2">corpdb_funcionarios</td><td class="p-2 text-cyan-400">JOIN (> 8000)</td><td class="p-2">Roberto Hacker (ID 2)</td><td class="p-2 font-bold text-amber-400">P</td></tr>
+                                    <tr><td class="p-2">corpdb_autorizacoes</td><td class="p-2 text-cyan-400">EXISTS (Hoje)</td><td class="p-2">NAO Autorizado</td><td class="p-2 font-bold text-amber-400">H</td></tr>
+                                    <tr><td class="p-2">corpdb_logs_catraca</td><td class="p-2 text-cyan-400">NOT EXISTS Saída</td><td class="p-2">Log ID 3 (NULL)</td><td class="p-2 font-bold text-amber-400">A</td></tr>
+                                    <tr><td class="p-2">corpdb_projetos</td><td class="p-2 text-cyan-400">COUNT > 5</td><td class="p-2">Projeto ID 3</td><td class="p-2 font-bold text-amber-400">Z</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <button onclick="preencherMandadoQBE()" class="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-mono-code text-xs font-bold transition">
+                            ⚡ Transcrever Código QBE (ALPHAZ) para o Cofre
+                        </button>
+                    </div>
+
+                    <!-- VALIDADOR DE EVIDÊNCIAS DO COFRE MESTRE -->
+                    <div class="glass-card rounded-2xl p-5 border border-amber-500/30">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i data-lucide="key-round" class="w-5 h-5 text-amber-400"></i>
+                                Submeter Prova no Cofre Mestre
+                            </h4>
+                            <span class="text-[11px] font-mono-code text-slate-400">Validação Criptográfica JWT</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input type="text" id="resposta-input" placeholder="Digite o ID, SIM/NAO ou Senha descoberta..."
+                                class="flex-1 px-4 py-3.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-400 focus:outline-none text-white font-mono-code text-sm">
+                            <button onclick="enviarResposta()" class="px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-extrabold text-xs font-mono-code uppercase tracking-wider shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 shrink-0">
+                                <i data-lucide="unlock" class="w-4 h-4"></i>
+                                Destravar Dígito
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TELA 3: MODO TELÃO DO PROJETOR (RANKING)   -->
+        <!-- ========================================== -->
+        <section id="tela-telao" class="hidden space-y-6">
+            <div class="glass-card rounded-2xl p-6 sm:p-8 border border-cyan-500/30">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6 mb-6">
+                    <div>
+                        <span class="text-xs font-mono-code uppercase px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">ATUALIZAÇÃO AO VIVO A CADA 3 SEGUNDOS</span>
+                        <h2 class="text-2xl sm:text-4xl font-extrabold text-white mt-2">🏆 Ranking Forense // CorpDB</h2>
+                        <p class="text-slate-400 text-sm">Qual equipe vai decodificar os 7 Atos do Capítulo 8 de Date e prender Carlos Sombra primeiro?</p>
+                    </div>
+                    <button onclick="carregarRankingTelao()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono-code text-cyan-300 border border-slate-700 flex items-center gap-2 self-start">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Atualizar Agora
+                    </button>
+                </div>
+
+                <div id="lista-ranking" class="space-y-3">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Inicializa os ícones Lucide
+        lucide.createIcons();
+
+        // ==========================================
+        // SINTETIZADOR DE ÁUDIO FORENSE (WEB AUDIO API)
+        // ==========================================
+        let somAtivo = true;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function tocarSom(tipo) {
+            if (!somAtivo) return;
+            try {
+                if (!audioCtx) audioCtx = new AudioCtx();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const agora = audioCtx.currentTime;
+                if (tipo === 'bip') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, agora);
+                    gain.gain.setValueAtTime(0.06, agora);
+                    osc.start(agora);
+                    osc.stop(agora + 0.06);
+                } else if (tipo === 'sucesso') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, agora);
+                    osc.frequency.setValueAtTime(659.25, agora + 0.1);
+                    osc.frequency.setValueAtTime(1046.50, agora + 0.2);
+                    gain.gain.setValueAtTime(0.12, agora);
+                    gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.45);
+                    osc.start(agora);
+                    osc.stop(agora + 0.45);
+                } else if (tipo === 'alarme') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(220, agora);
+                    osc.frequency.linearRampToValueAtTime(110, agora + 0.35);
+                    gain.gain.setValueAtTime(0.15, agora);
+                    gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.4);
+                    osc.start(agora);
+                    osc.stop(agora + 0.4);
+                }
+            } catch (e) {}
+        }
+
+        function alternarSom() {
+            somAtivo = !somAtivo;
+            const icone = document.getElementById('icone-som');
+            icone.setAttribute('data-lucide', somAtivo ? 'volume-2' : 'volume-x');
+            lucide.createIcons();
+            mostrarToast(somAtivo ? 'Áudio Forense Ativado 🔊' : 'Áudio Silenciado 🔇', 'info');
+        }
+
+        // ==========================================
+        // DOSSIÊ COMPLETO DOS 7 ATOS (CAPÍTULO 8 DATE)
+        // ==========================================
+        const DOSSIE_ATOS = {
+            1: {
+                tag: "ATO 1 // RESTRIÇÃO SIMPLES",
+                titulo: "O Rastro na Catraca",
+                historia: "As câmeras foram desligadas, mas a catraca eletrônica do 3º andar registrou quem entrou na madrugada do crime. Isolar tuplas específicas de uma relação é a operação mais elementar de investigação.",
+                pergunta: "Qual o ID do funcionário suspeito que entrou exatamente às 02:15?",
+                dica: "No Cálculo de Tuplas de Date, filtramos uma variável de intervalo com uma condição booleana. Execute: SELECT * FROM corpdb_logs_catraca; e observe a coluna funcionario_id às 02:15:00.",
+                letra: "A"
+            },
+            2: {
+                tag: "ATO 2 // SUBCONSULTA COM IN",
+                titulo: "O Disfarce Corporativo",
+                historia: "Sabemos que o funcionário de ID 3 entrou às 02:15. Mas a qual departamento ele pertence? C. J. Date explica na Seção 8.6 que o operador IN foi criado na SQL para aproximá-la do cálculo relacional.",
+                pergunta: "Usando consulta ou subconsulta (IN), descubra o ID do Cargo (setor) do suspeito de ID 3.",
+                dica: "Consulte a tabela corpdb_funcionarios filtrando WHERE id IN (3) ou veja diretamente a coluna cargo_id do funcionário Carlos Sombra.",
+                letra: "L"
+            },
+            3: {
+                tag: "ATO 3 // JUNÇÃO E MÚLTIPLAS VARIÁVEIS",
+                titulo: "O Cúmplice nas Sombras",
+                historia: "Carlos Sombra não agiu sozinho! Outro funcionário de alto escalão entrou no prédio exatos 2 minutos antes dele (às 02:13) para desativar o alarme.",
+                pergunta: "Qual o ID do funcionário que ganha mais de R$ 8.000 e entrou às 02:13?",
+                dica: "Cruze as tabelas corpdb_funcionarios (f) e corpdb_logs_catraca (l) usando: SELECT f.id, f.nome, f.salario, l.hora_entrada FROM corpdb_funcionarios f JOIN corpdb_logs_catraca l ON f.id = l.funcionario_id WHERE f.salario > 8000;",
+                letra: "P"
+            },
+            4: {
+                tag: "ATO 4 // QUANTIFICADOR EXISTENCIAL (EXISTS)",
+                titulo: "A Porta dos Fundos",
+                historia: "A sala do servidor exige uma Liberação Especial válida para a data de HOJE (CURRENT_DATE). Vamos checar se EXISTE (EXISTS) autorização válida para o cúmplice (Roberto Hacker, ID 2).",
+                pergunta: "O cúmplice (ID 2) tinha autorização válida para HOJE? (Responda SIM ou NAO)",
+                dica: "Verifique a tabela corpdb_autorizacoes: SELECT * FROM corpdb_autorizacoes WHERE funcionario_id = 2 AND data_liberacao = CURRENT_DATE; Se retornar 0 linhas, a resposta é NAO!",
+                letra: "H"
+            },
+            5: {
+                tag: "ATO 5 // QUANTIFICADOR UNIVERSAL E NEGATIVA",
+                titulo: "O Apagão nos Registros",
+                historia: "Para fingir que nunca esteve lá ou confundir a perícia, o sabotador manipulou o banco e deixou o próprio registro de saída em branco (NULL / inexistente).",
+                pergunta: "Qual ID da tabela de logs (ou funcionario_id) possui a hora_saida NULA?",
+                dica: "Execute: SELECT * FROM corpdb_logs_catraca WHERE hora_saida IS NULL;",
+                letra: "A"
+            },
+            6: {
+                tag: "ATO 6 // FUNÇÕES DE AGREGAÇÃO (COUNT / HAVING)",
+                titulo: "O Alvo da Sabotagem",
+                historia: "Hora de medir o estrago. O criminoso rodou scripts destrutivos em vários sistemas, mas apenas o banco principal sofreu mais de 5 exclusões de tabelas.",
+                pergunta: "Qual o ID do projeto que sofreu mais de 5 exclusões de tabelas?",
+                dica: "Consulte corpdb_projetos filtrando onde exclusoes_tabelas > 5: SELECT id, nome_projeto, exclusoes_tabelas FROM corpdb_projetos WHERE exclusoes_tabelas > 5;",
+                letra: "Z"
+            },
+            7: {
+                tag: "ATO 7 // INTERROGATÓRIO FINAL (QBE)",
+                titulo: "Mandado de Prisão em Flagrante",
+                historia: "Você reuniu todas as 6 letras do Cofre Mestre! Use a Matriz Visual Query-By-Example (QBE) ao lado para unir as letras descobertas e emitir a ordem de prisão contra Carlos Sombra e Roberto Hacker!",
+                pergunta: "Insira a senha de 6 letras decodificada nos atos anteriores para trancar os culpados!",
+                dica: "Junte as 6 letras abertas no seu Cofre Mestre no topo da tela (A + L + P + H + A + Z) e envie ALPHAZ!",
+                letra: "🔓"
+            }
+        };
+
+        const LETRAS_COFRE = ["A", "L", "P", "H", "A", "Z", "🔓"];
+
+        // Estado Local
+        let token = localStorage.getItem('corpdb_token') || "";
+        let faseAtualGlobal = 1;
+        let modoTelaoAtivo = false;
+        let intervaloTelao = null;
+
+        // Se já tiver token salvo no navegador do celular, reconecta direto
+        window.addEventListener('DOMContentLoaded', () => {
+            if (token) {
+                document.getElementById("tela-login").classList.add("hidden");
+                document.getElementById("tela-jogo").classList.remove("hidden");
+                document.getElementById("btn-sair").classList.remove("hidden");
+                atualizarTerminal();
+            }
+        });
+
+        // ==========================================
+        // SISTEMA DE TOAST (NOTIFICAÇÕES VISUAIS)
+        // ==========================================
+        function mostrarToast(mensagem, tipo = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const estilos = {
+                sucesso: 'bg-emerald-950/95 border-emerald-500 text-emerald-200',
+                erro: 'bg-red-950/95 border-red-500 text-red-200',
+                info: 'bg-slate-900/95 border-cyan-500 text-cyan-200'
+            };
+
+            toast.className = `pointer-events-auto p-4 rounded-xl border-l-4 shadow-2xl backdrop-blur-md text-xs font-mono-code transition-all duration-300 ${estilos[tipo] || estilos.info}`;
+            toast.innerHTML = `<div class="font-bold">${mensagem}</div>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // ==========================================
+        // 1. ENTRAR NO JOGO (LOGIN DA EQUIPE)
+        // ==========================================
+        async function entrarNoJogo(event) {
+            if (event) event.preventDefault();
+            const nome = document.getElementById("nome-equipe").value.trim();
+            if (!nome) return;
+
+            try {
+                const res = await fetch('/api/jogar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome_equipe: nome })
+                });
+                const data = await res.json();
+
+                if (data.token) {
+                    token = data.token;
+                    localStorage.setItem('corpdb_token', token);
+                    tocarSom('sucesso');
+                    mostrarToast(data.mensagem, 'sucesso');
+
+                    document.getElementById("tela-login").classList.add("hidden");
+                    document.getElementById("tela-jogo").classList.remove("hidden");
+                    document.getElementById("btn-sair").classList.remove("hidden");
+                    atualizarTerminal();
+                } else {
+                    tocarSom('alarme');
+                    mostrarToast(data.erro || 'Erro ao credenciar equipe.', 'erro');
+                }
+            } catch (e) {
+                mostrarToast('Falha de conexão com o servidor CorpDB.', 'erro');
+            }
+        }
+
+        function sairDaEquipe() {
+            localStorage.removeItem('corpdb_token');
+            token = "";
+            document.getElementById("tela-jogo").classList.add("hidden");
+            document.getElementById("btn-sair").classList.add("hidden");
+            document.getElementById("tela-login").classList.remove("hidden");
+        }
+
+        // ==========================================
+        // 2. ATUALIZAR PROGRESSO, COFRE E DOSSIÊ
+        // ==========================================
+        async function atualizarTerminal() {
+            if (!token) return;
+            try {
+                const res = await fetch('/api/terminal', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) {
+                    sairDaEquipe();
+                    return;
+                }
+                const data = await res.json();
+                faseAtualGlobal = data.progresso.fase_atual;
+
+                document.getElementById("display-equipe").innerText = data.equipe;
+                document.getElementById("display-pontos").innerText = data.progresso.pontuacao;
+                document.getElementById("display-fase-badge").innerText = faseAtualGlobal > 7 ? "7/7 ✅" : `${faseAtualGlobal}/7`;
+
+                renderizarCofreEStepper(faseAtualGlobal);
+                renderizarDossieAto(faseAtualGlobal);
+            } catch (e) {
+                console.error("Erro ao sincronizar terminal:", e);
+            }
+        }
+
+        function renderizarCofreEStepper(faseAtual) {
+            // Renderiza os 7 Slots do Cofre baseados na faseAtual
+            const cofreContainer = document.getElementById('cofre-slots');
+            cofreContainer.innerHTML = '';
+
+            for (let i = 1; i <= 7; i++) {
+                const destravado = i < faseAtual;
+                const letra = destravado ? LETRAS_COFRE[i - 1] : '?';
+                const classeExtra = destravado ? 'unlocked border-amber-400 text-amber-300' : 'border-slate-700 text-slate-600';
+
+                cofreContainer.innerHTML += `
+                    <div class="vault-slot w-9 h-11 sm:w-10 sm:h-12 rounded-lg border flex flex-col items-center justify-center font-mono-code ${classeExtra}">
+                        <span class="text-[9px] text-slate-500">#${i}</span>
+                        <span class="text-sm sm:text-base font-extrabold">${letra}</span>
+                    </div>
+                `;
+            }
+
+            // Renderiza o Stepper de 1 a 7
+            const stepper = document.getElementById('stepper-atos');
+            stepper.innerHTML = '';
+            for (let i = 1; i <= 7; i++) {
+                let cor = 'bg-slate-900 text-slate-500 border-slate-800';
+                if (i < faseAtual) cor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                else if (i === faseAtual) cor = 'bg-amber-500/20 text-amber-300 border-amber-400 font-bold shadow-sm shadow-amber-500/20';
+
+                stepper.innerHTML += `
+                    <div class="px-2.5 py-1 rounded-lg border text-xs font-mono-code shrink-0 ${cor}">
+                        Ato ${i} ${i < faseAtual ? '✓' : ''}
+                    </div>
+                `;
+            }
+        }
+
+        function renderizarDossieAto(faseAtual) {
+            const painelQBE = document.getElementById('painel-qbe');
+
+            if (faseAtual > 7) {
+                document.getElementById("ato-tag").innerText = "CASO ENCERRADO // MISSÃO CUMPRIDA";
+                document.getElementById("ato-titulo").innerText = "🎉 Sabotadores Presos em Flagrante!";
+                document.getElementById("ato-historia").innerText = "Excelente trabalho forense! Com todas as provas extraídas via SQL e Cálculo Relacional, Carlos Sombra (ID 3) e seu cúmplice Roberto Hacker (ID 2) confessaram a sabotagem ao Banco de Produção Master.";
+                document.getElementById("pergunta-atual").innerText = "CASO CONCLUÍDO! Acompanhe sua posição no Modo Telão.";
+                document.getElementById("ato-dica").innerText = "Vocês dominaram o Capítulo 8 de C. J. Date!";
+                painelQBE.classList.add('hidden');
+                return;
+            }
+
+            const ato = DOSSIE_ATOS[faseAtual];
+            document.getElementById("ato-tag").innerText = ato.tag;
+            document.getElementById("ato-titulo").innerText = ato.titulo;
+            document.getElementById("ato-historia").innerText = ato.historia;
+            document.getElementById("pergunta-atual").innerText = ato.pergunta;
+            document.getElementById("ato-dica").innerText = ato.dica;
+
+            // Mostra a matriz QBE especial no Ato 7
+            if (faseAtual === 7) {
+                painelQBE.classList.remove('hidden');
+            } else {
+                painelQBE.classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // 3. EXECUTAR CONSULTA SQL NO NEON
+        // ==========================================
+        async function executarSQL() {
+            const sql = document.getElementById("sql-input").value.trim();
+            if (!sql) {
+                mostrarToast("Digite ou selecione blocos para montar um comando SQL.", "info");
+                return;
+            }
+
+            tocarSom('bip');
+            const containerResultado = document.getElementById("resultado-sql");
+            containerResultado.innerHTML = `<div class="p-6 text-center text-xs font-mono-code text-cyan-400 animate-pulse">Consultando servidor PostgreSQL no Neon...</div>`;
+
+            try {
+                const res = await fetch('/api/executar', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ sql })
+                });
+                const data = await res.json();
+
+                if (data.erro) {
+                    tocarSom('alarme');
+                    const painel = document.getElementById('painel-terminal');
+                    painel.classList.add('alarm-active');
+                    setTimeout(() => painel.classList.remove('alarm-active'), 2000);
+
+                    containerResultado.innerHTML = `
+                        <div class="p-4 bg-red-950/60 text-red-300 font-mono-code text-xs">
+                            <div class="font-bold text-red-400 mb-1">⚠️ ALERTA DE EXECUÇÃO:</div>
+                            ${data.erro}
+                        </div>
+                    `;
+                    atualizarTerminal();
+                    return;
+                }
+
+                document.getElementById("contador-linhas").innerText = `${data.linhas_retornadas} tupla(s) retornada(s)`;
+
+                if (data.dados && data.dados.length > 0) {
+                    let tabela = `<table class="w-full text-left border-collapse font-mono-code text-xs"><thead><tr class="bg-slate-900 text-cyan-400 border-b border-slate-800">`;
+                    Object.keys(data.dados[0]).forEach(col => {
+                        tabela += `<th class="p-3 uppercase tracking-wider">${col}</th>`;
+                    });
+                    tabela += `</tr></thead><tbody class="divide-y divide-slate-800/70">`;
+
+                    data.dados.forEach(linha => {
+                        tabela += `<tr class="hover:bg-slate-900/60 transition">`;
+                        Object.values(linha).forEach(val => {
+                            const valorFormatado = val === null 
+                                ? `<span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">NULL</span>` 
+                                : val;
+                            tabela += `<td class="p-3 text-slate-200 whitespace-nowrap">${valorFormatado}</td>`;
+                        });
+                        tabela += `</tr>`;
+                    });
+                    tabela += `</tbody></table>`;
+                    containerResultado.innerHTML = tabela;
+                } else {
+                    containerResultado.innerHTML = `<div class="p-6 text-center text-xs font-mono-code text-amber-300">0 tuplas encontradas para os critérios informados.</div>`;
+                }
+            } catch (e) {
+                containerResultado.innerHTML = `<div class="p-4 text-red-400 text-xs font-mono-code">Falha de comunicação com o servidor.</div>`;
+            }
+        }
+
+        // ==========================================
+        // 4. SUBMETER EVIDÊNCIA AO COFRE MESTRE
+        // ==========================================
+        async function enviarResposta() {
+            const input = document.getElementById("resposta-input");
+            const resposta = input.value.trim();
+            if (!resposta) {
+                mostrarToast("Insira sua dedução antes de acionar o cofre.", "info");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/cofre', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ resposta_submetida: resposta })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.resultado) {
+                    tocarSom('sucesso');
+                    mostrarToast(`${data.resultado} ${data.mensagem} [Dígito: ${data.digito_descoberto}]`, 'sucesso');
+                    input.value = "";
+                    atualizarTerminal();
+                } else {
+                    tocarSom('alarme');
+                    mostrarToast(`${data.resultado || '❌ ERROU!'} ${data.mensagem || ''}`, 'erro');
+                    atualizarTerminal();
+                }
+            } catch (e) {
+                mostrarToast("Erro ao validar resposta no cofre.", "erro");
+            }
+        }
+
+        // ==========================================
+        // FUNÇÕES AUXILIARES MOBILE & TELÃO
+        // ==========================================
+        function inserirBloco(texto) {
+            tocarSom('bip');
+            const textarea = document.getElementById("sql-input");
+            const inicio = textarea.selectionStart;
+            const fim = textarea.selectionEnd;
+            const atual = textarea.value;
+            textarea.value = atual.substring(0, inicio) + texto + atual.substring(fim);
+            textarea.focus();
+        }
+
+        function inspecionarTabela(nomeTabela) {
+            const textarea = document.getElementById("sql-input");
+            textarea.value = `SELECT * FROM ${nomeTabela};`;
+            executarSQL();
+        }
+
+        function limparSQL() {
+            document.getElementById("sql-input").value = "";
+            document.getElementById("sql-input").focus();
+        }
+
+        function preencherMandadoQBE() {
+            tocarSom('bip');
+            document.getElementById("resposta-input").value = "ALPHAZ";
+            mostrarToast("Código ALPHAZ transcrito! Clique em Destravar Dígito.", "info");
+        }
+
+        function trocarAbaDossie(aba) {
+            const tabEsquema = document.getElementById('tab-esquema');
+            const tabSuspeitos = document.getElementById('tab-suspeitos');
+            const contEsquema = document.getElementById('conteudo-esquema');
+            const contSuspeitos = document.getElementById('conteudo-suspeitos');
+
+            if (aba === 'esquema') {
+                contEsquema.classList.remove('hidden');
+                contSuspeitos.classList.add('hidden');
+                tabEsquema.className = "pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-cyan-400 text-cyan-400 flex items-center gap-1.5";
+                tabSuspeitos.className = "pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5";
+            } else {
+                contEsquema.classList.add('hidden');
+                contSuspeitos.classList.remove('hidden');
+                tabSuspeitos.className = "pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-cyan-400 text-cyan-400 flex items-center gap-1.5";
+                tabEsquema.className = "pb-2.5 px-3 text-xs font-mono-code font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5";
+            }
+        }
+
+        function alternarModoTelao() {
+            modoTelaoAtivo = !modoTelaoAtivo;
+            const telaTelao = document.getElementById('tela-telao');
+            const telaJogo = document.getElementById('tela-jogo');
+            const telaLogin = document.getElementById('tela-login');
+            const textoBtn = document.getElementById('texto-btn-telao');
+
+            if (modoTelaoAtivo) {
+                telaTelao.classList.remove('hidden');
+                telaJogo.classList.add('hidden');
+                telaLogin.classList.add('hidden');
+                textoBtn.innerText = "Voltar ao Terminal";
+                carregarRankingTelao();
+                intervaloTelao = setInterval(carregarRankingTelao, 3000);
+            } else {
+                clearInterval(intervaloTelao);
+                telaTelao.classList.add('hidden');
+                textoBtn.innerText = "Modo Telão (Ranking)";
+                if (token) telaJogo.classList.remove('hidden');
+                else telaLogin.classList.remove('hidden');
+            }
+        }
+
+        async function carregarRankingTelao() {
+            const container = document.getElementById('lista-ranking');
+            try {
+                const res = await fetch('/api/ranking');
+                if (!res.ok) throw new Error("Rota de ranking ainda não adicionada");
+                const equipes = await res.json();
+
+                if (equipes.length === 0) {
+                    container.innerHTML = `<div class="p-8 text-center text-slate-400 font-mono-code">Nenhuma equipe credenciada ainda. Aguardando detetives...</div>`;
+                    return;
+                }
+
+                container.innerHTML = equipes.map((eq, idx) => {
+                    const atosConcluidos = Math.min(7, Math.max(0, eq.fase_atual - 1));
+                    const percentual = Math.round((atosConcluidos / 7) * 100);
+                    const medalha = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+
+                    return `
+                        <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl font-bold w-10 text-center">${medalha}</span>
+                                <div>
+                                    <div class="text-lg font-bold text-white">${eq.nome}</div>
+                                    <div class="text-xs font-mono-code text-slate-400">
+                                        ${eq.fase_atual > 7 ? '🔓 COFRE ABERTO // CASO RESOLVIDO!' : `Investigando Ato ${eq.fase_atual} de 7`}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4 sm:w-1/2">
+                                <div class="flex-1 bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800">
+                                    <div class="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-500" style="width: ${percentual}%"></div>
+                                </div>
+                                <span class="font-mono-code font-extrabold text-lg text-emerald-400 w-24 text-right">${eq.pontuacao} pts</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="p-6 rounded-xl bg-slate-900 border border-amber-500/30 text-xs font-mono-code text-amber-300">
+                        Para ativar o Ranking Global de todas as equipes, adicione a rota <code>GET /api/ranking</code> no seu <code>index.js</code> e reinicie o servidor!
+                    </div>
+                `;
+            }
+        }
+        // ==========================================
+        // LÓGICA DO PAINEL DO PROFESSOR
+        // ==========================================
+        let tokenAdmin = "";
+
+        function abrirModalAdmin() {
+            document.getElementById('modal-admin').classList.remove('hidden');
+        }
+
+        function fecharModalAdmin() {
+            document.getElementById('modal-admin').classList.add('hidden');
+            document.getElementById('senha-admin').value = "";
+        }
+
+        async function fazerLoginAdmin() {
+            const senha = document.getElementById('senha-admin').value;
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ senha })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    tokenAdmin = data.token;
+                    document.getElementById('area-login-admin').classList.add('hidden');
+                    document.getElementById('area-painel-admin').classList.remove('hidden');
+                    mostrarToast("Painel da Diretoria Destravado", "sucesso");
+                    carregarEquipesAdmin();
+                } else {
+                    mostrarToast("Senha Incorreta", "erro");
+                }
+            } catch (e) {
+                mostrarToast("Erro no servidor.", "erro");
+            }
+        }
+
+        async function carregarEquipesAdmin() {
+            try {
+                const res = await fetch('/api/ranking');
+                const equipes = await res.json();
+                
+                const container = document.getElementById('lista-equipes-admin');
+                container.innerHTML = equipes.map(eq => `
+                    <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-slate-700">
+                        <div>
+                            <div class="text-sm font-bold text-white">${eq.nome}</div>
+                            <div class="text-[10px] font-mono-code text-slate-400">Ato ${eq.fase_atual} | ${eq.pontuacao} pts</div>
+                        </div>
+                        <button onclick="excluirEquipe(${eq.id})" class="p-2 rounded bg-red-500/10 hover:bg-red-500/30 text-red-400 transition" title="Excluir Equipe">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `).join('');
+                lucide.createIcons(); // Recarrega os ícones recém-adicionados
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function excluirEquipe(id) {
+            if (!confirm("Atenção Professor: Excluir esta equipe permanentemente do banco?")) return;
+            
+            try {
+                const res = await fetch(`/api/admin/equipes/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + tokenAdmin }
+                });
+                
+                if (res.ok) {
+                    mostrarToast("Equipe excluída com sucesso.", "sucesso");
+                    carregarEquipesAdmin(); // Atualiza a lista do professor
+                    carregarRankingTelao(); // Atualiza o telão atrás de você
+                } else {
+                    mostrarToast("Erro ao excluir ou token expirado.", "erro");
+                }
+            } catch (e) {
+                mostrarToast("Erro de comunicação.", "erro");
+            }
+        }
+    </script>
+</body>
+</html>
