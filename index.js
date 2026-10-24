@@ -4,18 +4,12 @@ const jwt = require('jsonwebtoken');
 const db = require('./database');
 const path = require('path');
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static('public')); // Permite entregar a tela HTML aos usuários
 
 const SECRET = process.env.JWT_SECRET;
 
-// 1. Auto-setup: Cria a tabela de pontuação das equipes se não existir
 // 1. Auto-setup: Cria a tabela e garante que a coluna de vitória exista
 db.query(`
     CREATE TABLE IF NOT EXISTS game_equipes (
@@ -57,6 +51,7 @@ app.post('/api/jogar', async (req, res) => {
             fase_atual: equipe.fase_atual
         });
     } catch (erro) {
+        console.error('Erro no /api/jogar:', erro);
         res.status(500).json({ erro: 'Erro no servidor central.' });
     }
 });
@@ -75,7 +70,7 @@ function verificarCracha(req, res, next) {
     jwt.verify(token, SECRET, (err, equipeDecodificada) => {
         if (err) return res.status(401).json({ erro: "Crachá expirado ou falsificado." });
         
-        // Salva os dados da equipe na requisição para usarmos na avaliação do SQL[cite: 1]
+        // Salva os dados da equipe na requisição para usarmos na avaliação do SQL
         req.equipe = equipeDecodificada; 
         next(); 
     });
@@ -87,12 +82,17 @@ function verificarCracha(req, res, next) {
 app.get('/api/terminal', verificarCracha, async (req, res) => {
     try {
         const result = await db.query('SELECT pontuacao, fase_atual FROM game_equipes WHERE id = $1', [req.equipe.id]);
+        if (result.rows.length === 0) {
+            // Equipe foi excluída pelo professor: derruba o crachá no front
+            return res.status(404).json({ erro: 'Equipe não encontrada.' });
+        }
         res.json({
             equipe: req.equipe.nome,
             status: 'Terminal Investigativo Liberado 🟢',
             progresso: result.rows[0]
         });
     } catch (erro) {
+        console.error('Erro no /api/terminal:', erro);
         res.status(500).json({ erro: 'Falha ao ler progresso.' });
     }
 });
@@ -107,19 +107,41 @@ app.post('/api/executar', verificarCracha, async (req, res) => {
     // 1. Firewall Anti-Hacker: Bloqueia qualquer comando de modificação ou acesso ao sistema do jogo
     const palavrasProibidas = /DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|game_/i;
     if (palavrasProibidas.test(sql)) {
-        // Punição automática para tentativa de trapaça
-        await db.query('UPDATE game_equipes SET pontuacao = pontuacao - 100 WHERE id = $1', [req.equipe.id]);
+        try {
+            // Punição automática para tentativa de trapaça
+            await db.query('UPDATE game_equipes SET pontuacao = pontuacao - 100 WHERE id = $1', [req.equipe.id]);
+        } catch (erro) {
+            console.error('Erro ao aplicar penalidade do firewall:', erro);
+        }
         return res.status(403).json({ 
             erro: "🔥 ALARME DA CORPDB: Tentativa de sabotagem detectada! Comando bloqueado e equipe penalizada (-100 pontos)." 
         });
     }
 
+    // 2. Blindagem extra: apenas UM comando de leitura por vez
+    const comandoLimpo = sql.trim().replace(/;+\s*$/, '').trim();
+    if (comandoLimpo.includes(';')) {
+        return res.status(403).json({ erro: "🛑 O terminal aceita apenas um comando SQL por vez." });
+    }
+    if (!/^(SELECT|WITH|SHOW|EXPLAIN|DESCRIBE|DESC|VALUES|TABLE)\b/i.test(comandoLimpo)) {
+        return res.status(403).json({ erro: "🛑 Somente consultas de leitura são permitidas (SELECT, WITH, SHOW, EXPLAIN)." });
+    }
+
+    // 3. Executa a consulta do aluno em ambiente Somente Leitura, usando UM client dedicado
+    // (BEGIN/COMMIT precisam rodar na MESMA conexão — pool.query pegaria conexões diferentes)
+    let client;
     try {
-        // 2. Executa a consulta do aluno em um ambiente blindado de Somente Leitura
-        await db.query('BEGIN TRANSACTION READ ONLY');
-        const result = await db.query(sql);
-        await db.query('COMMIT');
-        
+        client = await db.connect();
+    } catch (erro) {
+        console.error('Sem conexão com a CorpDB:', erro);
+        return res.status(500).json({ erro: 'Servidor sem conexão com o banco de dados.' });
+    }
+
+    try {
+        await client.query('BEGIN TRANSACTION READ ONLY');
+        const result = await client.query(comandoLimpo);
+        await client.query('COMMIT');
+
         // Devolve as colunas e as linhas encontradas para o aluno analisar
         res.json({
             status: "Consulta Executada com Sucesso",
@@ -127,8 +149,10 @@ app.post('/api/executar', verificarCracha, async (req, res) => {
             dados: result.rows
         });
     } catch (err) {
-        await db.query('ROLLBACK'); // Aborta a transação em caso de erro de sintaxe
+        try { await client.query('ROLLBACK'); } catch (rollbackErro) { /* transação já abortada */ }
         res.status(400).json({ erro: "Erro de Sintaxe SQL: " + err.message });
+    } finally {
+        client.release();
     }
 });
 
@@ -149,27 +173,52 @@ const GABARITO = {
 
 app.post('/api/cofre', verificarCracha, async (req, res) => {
     const { resposta_submetida } = req.body;
-    
+
+    if (resposta_submetida === undefined || resposta_submetida === null || String(resposta_submetida).trim() === '') {
+        return res.status(400).json({ erro: "Nenhuma evidência submetida ao cofre." });
+    }
+
     try {
         // Busca a fase atual da equipe
         const result = await db.query('SELECT fase_atual, pontuacao FROM game_equipes WHERE id = $1', [req.equipe.id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ erro: "Equipe não encontrada." });
+        }
         let { fase_atual, pontuacao } = result.rows[0];
 
         if (fase_atual > 7) {
-            return res.json({ status: "Jogo Concluído", mensagem: "Vocês já prenderam o culpado!" });
+            return res.json({
+                resultado: "🔓 CASO ENCERRADO",
+                status: "Jogo Concluído",
+                mensagem: "Vocês já prenderam o culpado!"
+            });
         }
 
         const faseJogo = GABARITO[fase_atual];
 
-        // Avalia a resposta convertendo tudo para maiúsculas e tirando espaços
-        if (resposta_submetida.toString().trim().toUpperCase() === faseJogo.resposta_correta) {
+        // Avalia a resposta: maiúsculas, sem espaços extras e sem acentos (aceita "NÃO" e "NAO")
+        const respostaNormalizada = String(resposta_submetida)
+            .trim()
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+        if (respostaNormalizada === faseJogo.resposta_correta) {
             
             fase_atual += 1;
             pontuacao += 100;
-            
-            // Salva o progresso no banco
-            await db.query('UPDATE game_equipes SET fase_atual = $1, pontuacao = $2 WHERE id = $3', [fase_atual, pontuacao, req.equipe.id]);
-            
+
+            if (fase_atual > 7) {
+                // Missão cumprida: registra a hora da vitória (alimenta o ranking do telão)
+                await db.query(
+                    'UPDATE game_equipes SET fase_atual = $1, pontuacao = pontuacao + 100, data_conclusao = COALESCE(data_conclusao, NOW()) WHERE id = $2',
+                    [fase_atual, req.equipe.id]
+                );
+            } else {
+                // Atualização atômica: respostas simultâneas não se sobrescrevem
+                await db.query('UPDATE game_equipes SET fase_atual = $1, pontuacao = pontuacao + 100 WHERE id = $2', [fase_atual, req.equipe.id]);
+            }
+
             res.json({
                 resultado: "✅ ACERTOU!",
                 mensagem: `Você desvendou o Ato ${fase_atual - 1}.`,
@@ -179,9 +228,9 @@ app.post('/api/cofre', verificarCracha, async (req, res) => {
             });
 
         } else {
-            // Firewall Anti-Chute: Retira 50 pontos
+            // Firewall Anti-Chute: Retira 50 pontos (atualização atômica)
             pontuacao -= 50;
-            await db.query('UPDATE game_equipes SET pontuacao = $1 WHERE id = $2', [pontuacao, req.equipe.id]);
+            await db.query('UPDATE game_equipes SET pontuacao = pontuacao - 50 WHERE id = $1', [req.equipe.id]);
             
             res.status(400).json({
                 resultado: "❌ ERROU!",
@@ -191,6 +240,7 @@ app.post('/api/cofre', verificarCracha, async (req, res) => {
         }
 
     } catch (erro) {
+        console.error('Falha na validação do cofre:', erro);
         res.status(500).json({ erro: "Falha na validação do cofre." });
     }
 });
@@ -213,6 +263,7 @@ app.get('/api/ranking', async (req, res) => {
         `);
         res.json(result.rows);
     } catch (erro) {
+        console.error('Erro no /api/ranking:', erro);
         res.status(500).json({ erro: 'Erro ao carregar o ranking.' });
     }
 });
@@ -255,6 +306,7 @@ app.delete('/api/admin/equipes/:id', verificarAdmin, async (req, res) => {
         if (result.rowCount === 0) return res.status(404).json({ erro: "Equipe não encontrada." });
         res.json({ mensagem: "Equipe desclassificada com sucesso!" });
     } catch (erro) {
+        console.error('Erro ao excluir equipe:', erro);
         res.status(500).json({ erro: "Erro ao excluir equipe." });
     }
 });
@@ -265,7 +317,8 @@ app.delete('/api/admin/equipes/:id', verificarAdmin, async (req, res) => {
 module.exports = app;
 
 // Inicia o servidor apenas se estiver rodando localmente no seu PC
-if (process.env.NODE_ENV !== 'production') {
+// (na Vercel, process.env.VERCEL = 1 e a plataforma consome o app exportado)
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
         console.log(`🕵️‍♂️ Servidor do Jogo escutando na porta ${PORT}`);

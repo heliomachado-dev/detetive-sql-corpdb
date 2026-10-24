@@ -2,7 +2,7 @@
 
 # 🕵️‍♂️ Detetive SQL // Operação CorpDB
 
-**[🔴 CLIQUE AQUI PARA ACESSAR O SISTEMA AO VIVO NA NUVEM](https://SEU-LINK-DA-VERCEL.vercel.app)**
+**[🔴 CLIQUE AQUI PARA ACESSAR O SISTEMA AO VIVO NA NUVEM](https://detetive-sql-corpdb.vercel.app)**
 
 Um ambiente interativo de *Escape Room* desenvolvido para o ensino prático de Bancos de Dados, SQL e Cálculo Relacional, inspirado nos conceitos do Capítulo 8 da obra de C. J. Date.
 
@@ -13,11 +13,11 @@ Um ambiente interativo de *Escape Room* desenvolvido para o ensino prático de B
 ## 📸 Telas da Aplicação
 
 <div align="center">
-  <img src="./tela-login.jpg" alt="Tela de credenciamento das equipes e briefing da Operação" width="100%">
+  <img src="./tela-login.png" alt="Tela de credenciamento das equipes e briefing da Operação" width="100%">
   <br>
   <i>Tela de credenciamento das equipes e briefing da Operação.</i>
   <br><br>
-  <img src="./tela-painel.jpg" alt="Terminal investigativo com conexão real ao banco, dicionário de dados interativo e Cofre Mestre" width="100%">
+  <img src="./tela-painel.png" alt="Terminal investigativo com conexão real ao banco, dicionário de dados interativo e Cofre Mestre" width="100%">
   <br>
   <i>Terminal investigativo com conexão real ao banco, dicionário de dados interativo e Cofre Mestre de 7 dígitos.</i>
 </div>
@@ -38,9 +38,9 @@ Um ambiente interativo de *Escape Room* desenvolvido para o ensino prático de B
 
 * **Node.js & Express:** Criação do servidor backend, roteamento da API e entrega da interface estática (Glassmorphism).
 * **PostgreSQL (Neon Cloud):** Banco de dados relacional Serverless, utilizando *Views* e funções de formatação (`TO_CHAR`) para blindagem de fusos horários.
-* **Vercel:** Hospedagem em nuvem configurada para execução sob demanda e alta disponibilidade.
+* **Vercel:** Hospedagem em nuvem com detecção automática de Express (zero-config): o `index.js` na raiz exporta o app e os arquivos de `public/` são servidos pelo CDN.
 * **JWT (JSON Web Token):** Autenticação de equipes, rastreamento de progresso e proteção do Painel de Administrador (Game Master) oculto.
-* **Transações Read-Only:** O motor do jogo utiliza uma *Sandbox* SQL executando comandos de alunos dentro de uma transação `BEGIN TRANSACTION READ ONLY`, bloqueando tentativas de injeção destrutiva (`DROP`, `DELETE`).
+* **Transações Read-Only:** o motor do jogo executa o SQL dos alunos em `BEGIN TRANSACTION READ ONLY` dentro de um **client dedicado do pool** (a transação inteira na mesma conexão), somado a um firewall de palavras proibidas (`DROP`, `DELETE`, `UPDATE`...) e à regra de **um único comando de leitura por vez** (`SELECT`, `WITH`, `SHOW`, `EXPLAIN`).
 
 ---
 
@@ -58,14 +58,88 @@ A aplicação avalia a capacidade analítica dos alunos através de respostas JS
 
 ---
 
+## 🌐 Deploy na Vercel (produção)
+
+O projeto usa o modo **zero-config** da Vercel: `index.js` na raiz com `module.exports = app` e arquivos estáticos em `public/` — **não** é preciso (nem recomendado) usar `rewrites`/`builds` no `vercel.json`.
+
+**1. Envie o código ao GitHub** (o repositório conectado à Vercel é atualizado a cada `git push`).
+
+**2. Na Vercel:** *Add New → Project* → importe o repositório `detetive-sql-corpdb`. Framework preset: **Express** (detecção automática). Build e Output Directory: deixe os padrões.
+
+**3. Cadastre as variáveis de ambiente** (*Settings → Environment Variables*) — o `.env` **não** é enviado pelo Git:
+
+| Variável | Origem |
+|---|---|
+| `DATABASE_URL` | Neon → *Connection string* do endpoint **pooled** (`ep-xxx-pooler`) |
+| `JWT_SECRET` | Gere um forte: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `SENHA_PROFESSOR` | A senha mestra que você escolher para o painel do Game Master |
+
+**4. Deploy.** Confira se `/api/ranking` responde JSON e `/` entrega a tela do jogo.
+
+> Se alguma rota `/api/*` retornar **404** após o deploy, aplique o plano B: crie `api/index.js` com `module.exports = require('../index');` e volte no `vercel.json` com `"rewrites": [{ "source": "/(.*)", "destination": "/api" }]`.
+
+---
+
 ## 🚀 Como Executar o Projeto Localmente
 
 ### Pré-requisitos
 * [Node.js](https://nodejs.org/) instalado.
-* Instância ativa do PostgreSQL (local ou nuvem).
+* Instância ativa do PostgreSQL (local ou nuvem Neon).
 
 ### Passo a Passo
 
 **1. Clone o repositório:**
 ```bash
-git clone [https://github.com/heliomachado-dev/detetive-sql-corpdb.git](https://github.com/heliomachado-dev/detetive-sql-corpdb.git)
+git clone https://github.com/heliomachado-dev/detetive-sql-corpdb.git
+cd detetive-sql-corpdb
+```
+
+**2. Instale as dependências:**
+```bash
+npm install
+```
+
+**3. Crie o arquivo `.env` na raiz:**
+```env
+DATABASE_URL=postgresql://usuario:senha@host/neondb?sslmode=require
+JWT_SECRET=cole_uma_chave_forte_aqui
+SENHA_PROFESSOR=diretoria2026
+PORT=3000
+```
+
+**4. Plante a cena do crime (cria tabelas, views e dados do caso):**
+```bash
+npm run seed
+```
+
+**5. Suba o servidor:**
+```bash
+npm start
+```
+
+Acesse `http://localhost:3000`.
+
+### Variáveis de ambiente
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Conexão com o PostgreSQL/Neon (SSL automático para URLs com `sslmode=require` ou `neon.tech`) |
+| `JWT_SECRET` | ✅ | Segredo dos crachás digitais (JWT) das equipes |
+| `SENHA_PROFESSOR` | opcional | Senha do painel do Game Master (padrão `diretoria2026` se ausente) |
+| `PORT` | opcional | Porta local (padrão 3000) |
+
+---
+
+## 🕹️ Comandos do Projeto
+
+| Comando | Função |
+|---|---|
+| `npm start` | Sobe o servidor local |
+| `npm run dev` | Sobe com auto-reload (`node --watch`) |
+| `npm run seed` | (Re)planta a cena do crime no banco |
+
+---
+
+## 🔐 Painel do Professor
+
+Clique no cadeado no canto inferior direito da tela e informe a `SENHA_PROFESSOR` para listar e excluir equipes.

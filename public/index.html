@@ -695,6 +695,18 @@
         });
 
         // ==========================================
+        // ESCAPE DE HTML (PROTEÇÃO CONTRA XSS)
+        // ==========================================
+        function escaparHTML(valor) {
+            return String(valor)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // ==========================================
         // SISTEMA DE TOAST (NOTIFICAÇÕES VISUAIS)
         // ==========================================
         function mostrarToast(mensagem, tipo = 'info') {
@@ -895,7 +907,7 @@
                 if (data.dados && data.dados.length > 0) {
                     let tabela = `<table class="w-full text-left border-collapse font-mono-code text-xs"><thead><tr class="bg-slate-900 text-cyan-400 border-b border-slate-800">`;
                     Object.keys(data.dados[0]).forEach(col => {
-                        tabela += `<th class="p-3 uppercase tracking-wider">${col}</th>`;
+                        tabela += `<th class="p-3 uppercase tracking-wider">${escaparHTML(col)}</th>`;
                     });
                     tabela += `</tr></thead><tbody class="divide-y divide-slate-800/70">`;
 
@@ -904,7 +916,7 @@
                         Object.values(linha).forEach(val => {
                             const valorFormatado = val === null 
                                 ? `<span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">NULL</span>` 
-                                : val;
+                                : escaparHTML(val);
                             tabela += `<td class="p-3 text-slate-200 whitespace-nowrap">${valorFormatado}</td>`;
                         });
                         tabela += `</tr>`;
@@ -943,7 +955,8 @@
 
                 if (res.ok && data.resultado) {
                     tocarSom('sucesso');
-                    mostrarToast(`${data.resultado} ${data.mensagem} [Dígito: ${data.digito_descoberto}]`, 'sucesso');
+                    const digitoDescoberto = data.digito_descoberto ? ` [Dígito: ${data.digito_descoberto}]` : '';
+                    mostrarToast(`${data.resultado} ${data.mensagem}${digitoDescoberto}`, 'sucesso');
                     input.value = "";
                     atualizarTerminal();
                 } else {
@@ -1050,7 +1063,7 @@
                             <div class="flex items-center gap-3">
                                 <span class="text-2xl font-bold w-10 text-center">${medalha}</span>
                                 <div>
-                                    <div class="text-lg font-bold text-white">${eq.nome}</div>
+                                    <div class="text-lg font-bold text-white">${escaparHTML(eq.nome)}</div>
                                     <div class="text-xs font-mono-code text-slate-400">
                                         ${eq.fase_atual > 7 ? '🔓 COFRE ABERTO // CASO RESOLVIDO!' : `Investigando Ato ${eq.fase_atual} de 7`}
                                     </div>
@@ -1120,7 +1133,7 @@
                 container.innerHTML = equipes.map(eq => `
                     <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-slate-700">
                         <div>
-                            <div class="text-sm font-bold text-white">${eq.nome}</div>
+                            <div class="text-sm font-bold text-white">${escaparHTML(eq.nome)}</div>
                             <div class="text-[10px] font-mono-code text-slate-400">Ato ${eq.fase_atual} | ${eq.pontuacao} pts</div>
                         </div>
                         <button onclick="excluirEquipe(${eq.id})" class="p-2 rounded bg-red-500/10 hover:bg-red-500/30 text-red-400 transition" title="Excluir Equipe">
