@@ -3,7 +3,6 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('./database');
 const path = require('path');
-app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -11,6 +10,7 @@ app.get('/', (req, res) => {
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static('public')); // Permite entregar a tela HTML aos usuários
 
 const SECRET = process.env.JWT_SECRET;
@@ -259,7 +259,15 @@ app.delete('/api/admin/equipes/:id', verificarAdmin, async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🕵️‍♂️ Servidor do Jogo escutando na porta ${PORT}`);
-});
+// ==========================================
+// EXPORTAÇÃO PARA A VERCEL (Obrigatório para Nuvem)
+// ==========================================
+module.exports = app;
+
+// Inicia o servidor apenas se estiver rodando localmente no seu PC
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`🕵️‍♂️ Servidor do Jogo escutando na porta ${PORT}`);
+    });
+}
