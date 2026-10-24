@@ -60,11 +60,13 @@ A aplicação avalia a capacidade analítica dos alunos através de respostas JS
 
 ## 🌐 Deploy na Vercel (produção)
 
-O projeto usa o modo **zero-config** da Vercel: `index.js` na raiz com `module.exports = app` e arquivos estáticos em `public/` — **não** é preciso (nem recomendado) usar `rewrites`/`builds` no `vercel.json`.
+O projeto usa o padrão clássico e mais confiável da Vercel: o app Express continua no `index.js` da raiz (usado localmente via `npm start`), o arquivo **`api/index.js`** o reexporta como Serverless Function e o `vercel.json` reescreve todos os caminhos para `/api`. Os arquivos de `public/` são servidos pelo CDN da Vercel.
+
+> **Por que não zero-config?** A detecção automática de Express existe, mas em projetos já importados antes de existir essa função ela pode não disparar (o build fica "vazio" e só o estático sobe). O padrão `api/` funciona com qualquer preset de framework e é o caminho documentado pela Vercel.
 
 **1. Envie o código ao GitHub** (o repositório conectado à Vercel é atualizado a cada `git push`).
 
-**2. Na Vercel:** *Add New → Project* → importe o repositório `detetive-sql-corpdb`. Framework preset: **Express** (detecção automática). Build e Output Directory: deixe os padrões.
+**2. Na Vercel:** *Add New → Project* → importe o repositório `detetive-sql-corpdb`. Não configure Build Command nem Output Directory (o padrão já trata `api/` + `public/`).
 
 **3. Cadastre as variáveis de ambiente** (*Settings → Environment Variables*) — o `.env` **não** é enviado pelo Git:
 
@@ -76,7 +78,7 @@ O projeto usa o modo **zero-config** da Vercel: `index.js` na raiz com `module.e
 
 **4. Deploy.** Confira se `/api/ranking` responde JSON e `/` entrega a tela do jogo.
 
-> Se alguma rota `/api/*` retornar **404** após o deploy, aplique o plano B: crie `api/index.js` com `module.exports = require('../index');` e volte no `vercel.json` com `"rewrites": [{ "source": "/(.*)", "destination": "/api" }]`.
+> **Se alguma rota `/api/*` retornar 404:** confirme que o `vercel.json` tem o `rewrites` apontando para `/api` e que existe um deployment novo no ar (`vercel ls`). A estrutura `api/index.js` + rewrite é o que garante que toda rota caia no Express.
 
 ---
 
